@@ -21,11 +21,14 @@ describe('exportFunctions() function exporter test suite', () => {
     'folder/not-a-func.ts',
     'folder/nestedFolder/sample-func.func.ts',
     'folder/nestedFolder/sample-js-func.func.js',
+    'myTestFunction.func.ts',
   ];
   const { name: tempFuncDir } = tmp.dirSync();
   const randOutput = Math.floor(Math.random() * 10);
   const filePathToPropertyPath = (moduleFilePath: string) => {
-    const funcName = bff.funcNameFromRelPathDefault(moduleFilePath);
+    // Normalize path separators for OS compatibility
+    const normalizedPath = bff.normalizePath(moduleFilePath);
+    const funcName = bff.funcNameFromRelPathDefault(normalizedPath);
     return funcName.split('-').join('.');
   };
 
@@ -48,7 +51,7 @@ describe('exportFunctions() function exporter test suite', () => {
     // eslint-disable-next-line implicit-arrow-linebreak
     bff.exportFunctions({
       __dirname: tempFuncDir,
-      __filename: `${tempFuncDir}/pretend-index.ts`,
+      __filename: bff.normalizePath(`${tempFuncDir}/pretend-index.ts`),
       exports: {},
       searchGlob: '**/*.func.{ts,js}',
       ...configObj,
@@ -99,6 +102,44 @@ describe('exportFunctions() function exporter test suite', () => {
     expect(Object.keys(result)).toHaveLength(1);
   });
 
+  it('should match when K_SERVICE is dash-lower (v2 style)', () => {
+    const kService = bff
+      .funcNameFromRelPathDefault(testFiles[1])
+      .toLowerCase();
+    process.env.K_SERVICE = kService;
+    const result = exportTestFactory({ enableLogger: true });
+    expect(result).toHaveProperty(filePathToPropertyPath(testFiles[1]));
+    expect(Object.keys(result)).toHaveLength(1);
+  });
+
+  it('should match camelCase function when K_SERVICE is lowercase (v2 real-world scenario)', () => {
+    // Simulate v2 scenario: myTestFunction.func.ts -> function name 'myTestFunction' -> K_SERVICE 'mytestfunction'
+    const camelCaseFuncName = bff.funcNameFromRelPathDefault(testFiles[8]); // myTestFunction.func.ts
+    expect(camelCaseFuncName).toBe('myTestFunction'); // Verify our assumption
+    
+    // In v2, K_SERVICE would be lowercase version of the function name
+    process.env.K_SERVICE = camelCaseFuncName.toLowerCase();
+    const result = exportTestFactory({ enableLogger: true });
+    
+    expect(result).toHaveProperty(filePathToPropertyPath(testFiles[8]));
+    expect(Object.keys(result)).toHaveLength(1);
+    expect(result).toHaveProperty('myTestFunction'); // Should export as myTestFunction
+  });
+
+  it('should match camelCase function with dash-lower K_SERVICE (v2 Cloud Run style)', () => {
+    // Test Cloud Run service naming: myTestFunction -> my-test-function
+    const camelCaseFuncName = bff.funcNameFromRelPathDefault(testFiles[8]); // myTestFunction
+    expect(camelCaseFuncName).toBe('myTestFunction');
+    
+    // Cloud Run converts camelCase to dash-lower: myTestFunction -> my-test-function
+    process.env.K_SERVICE = 'my-test-function';
+    const result = exportTestFactory({ enableLogger: true });
+    
+    expect(result).toHaveProperty(filePathToPropertyPath(testFiles[8]));
+    expect(Object.keys(result)).toHaveLength(1);
+    expect(result).toHaveProperty('myTestFunction'); // Should still export as myTestFunction
+  });
+
   it('should only extract one module when FUNCTION_NAME present', () => {
     process.env.FUNCTION_NAME = bff.funcNameFromRelPathDefault(testFiles[1]);
     const result = exportTestFactory({ enableLogger: true });
@@ -115,11 +156,15 @@ describe('exportFunctions() function exporter test suite', () => {
   it('will provide a paths mode for buildtools', () => {
     const output = exportTestFactory({ exportPathMode: true });
     console.log(output);
-    expect(output).toHaveProperty(filePathToPropertyPath(testFiles[4]), testFiles[4]);
+    // Normalize path separators in expected value to match OS output
+    const expectedPath = bff.normalizePath(testFiles[4]);
+    expect(output).toHaveProperty(filePathToPropertyPath(testFiles[4]), expectedPath);
   });
 
   it('can detect both js and ts files using updated glob search - new default', () => {
     const output = exportTestFactory({ exportPathMode: true });
-    expect(output).toHaveProperty(filePathToPropertyPath(testFiles[7]), testFiles[7]); // js file
+    // Normalize path separators in expected value to match OS output
+    const expectedPath = bff.normalizePath(testFiles[7]);
+    expect(output).toHaveProperty(filePathToPropertyPath(testFiles[7]), expectedPath); // js file
   });
 });
