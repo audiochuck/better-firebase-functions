@@ -8,6 +8,16 @@ function getDirnameFromFilename(__filename: string) {
   return __filename.split(sep).slice(0, -1).join(sep);
 }
 
+/**
+ * Normalizes path separators to the OS-specific separator.
+ * Converts forward slashes to backslashes on Windows, leaves paths unchanged on Unix-like systems.
+ * @param path - The path to normalize
+ * @returns The path with normalized separators
+ */
+export function normalizePath(path: string): string {
+  return path.replace(/\//g, sep);
+}
+
 export function funcNameFromRelPathDefault(relPath: string): string {
   const relPathArray = relPath.split(sep); /* ? */
   const fileName = relPathArray.pop(); /* ? */
@@ -134,8 +144,20 @@ const disabledLogger = {
 };
 
 const getFunctionInstance = () => process.env.FUNCTION_NAME || process.env.K_SERVICE;
+const toKServiceStyle = (value: string) => value
+  .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+  .toLowerCase();
 const isDeployment = () => !getFunctionInstance();
-const funcNameMatchesInstance = (funcName: string) => funcName === getFunctionInstance();
+const funcNameMatchesInstance = (funcName: string) => {
+  const instance = getFunctionInstance();
+  if (!instance) return false;
+  if (funcName === instance) return true;
+  const funcLower = funcName.toLowerCase();
+  const instLower = instance.toLowerCase();
+  if (funcLower === instLower) return true;
+  if (toKServiceStyle(funcName) === instLower) return true;
+  return false;
+};
 const getTriggerFromModule = (inputModule: any) => inputModule?.default;
 
 const coldModuleMsg = '[better-firebase-functions] Load Module (Cold-Start)';
